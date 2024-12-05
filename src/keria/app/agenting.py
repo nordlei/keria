@@ -4,6 +4,7 @@ KERIA
 keria.app.agenting module
 
 """
+from base64 import b64decode
 import json
 import os
 from dataclasses import asdict
@@ -48,11 +49,13 @@ from ..db import basing
 logger = ogler.getLogger()
 
 
-def setup(name, bran, adminPort, bootPort, base='', httpPort=None, configFile=None, configDir=None,
-          keypath=None, certpath=None, cafilepath=None):
+def setup(name: str, bran: str | None, adminPort: int, bootPort: int, base='', httpPort=None, configFile=None, configDir=None,
+          keypath=None, certpath=None, cafilepath=None, curls: list[str] | None = None, username: str | None = None,
+          password: str | None = None, cors: bool = False):
     """ Set up an ahab in Signify mode """
 
-    agency = Agency(name=name, base=base, bran=bran, configFile=configFile, configDir=configDir)
+    agency = Agency(name=name, base=base, bran=bran, configFile=configFile, configDir=configDir, curls=curls)
+
     bootApp = falcon.App(middleware=falcon.CORSMiddleware(
         allow_origins='*', allow_credentials='*',
         expose_headers=['cesr-attachment', 'cesr-date', 'content-type', 'signature', 'signature-input',
@@ -62,7 +65,7 @@ def setup(name, bran, adminPort, bootPort, base='', httpPort=None, configFile=No
     if not bootServer.reopen():
         raise RuntimeError(f"cannot create boot http server on port {bootPort}")
     bootServerDoer = http.ServerDoer(server=bootServer)
-    bootEnd = BootEnd(agency)
+    bootEnd = BootEnd(agency, username=username, password=password)
     bootApp.add_route("/boot", bootEnd)
     bootApp.add_route("/health", HealthEnd())
 
@@ -73,7 +76,7 @@ def setup(name, bran, adminPort, bootPort, base='', httpPort=None, configFile=No
         allow_origins='*', allow_credentials='*',
         expose_headers=['cesr-attachment', 'cesr-date', 'content-type', 'signature', 'signature-input',
                         'signify-resource', 'signify-timestamp']))
-    if os.getenv("KERI_AGENT_CORS", "false").lower() in ("true", "1"):
+    if cors:
         app.add_middleware(middleware=httping.HandleCORS())
     app.add_middleware(authing.SignatureValidationComponent(agency=agency, authn=authn, allowed=["/agent"]))
     app.req_options.media_handlers.update(media.Handlers())
@@ -152,11 +155,12 @@ class Agency(doing.DoDoer):
     
     """
 
-    def __init__(self, name, bran, base="", configFile=None, configDir=None, adb=None, temp=False):
+    def __init__(self, name, bran, base="", configFile=None, configDir=None, adb=None, temp=False, curls:list[str]|None=None):
         self.name = name
         self.base = base
         self.bran = bran
         self.temp = temp
+        self.curls = curls
         self.configFile = configFile
         self.configDir = configDir
         self.cf = None
@@ -180,12 +184,16 @@ class Agency(doing.DoDoer):
                             reopen=True)
 
         cf = None
+        habName = f"agent-{caid}"
         if self.cf is not None:  # Load config file if creating database
             data = dict(self.cf.get())
+            if self.curls is not None:
+                data[habName] = { "dt": nowIso8601(), "curls": self.curls }
+
             if "keria" in data:
-                curls = data["keria"]
-                data[f"agent-{caid}"] = curls
+                data[habName] = data["keria"]
                 del data["keria"]
+            
 
             cf = configing.Configer(name=f"{caid}",
                                     base="",
@@ -197,7 +205,7 @@ class Agency(doing.DoDoer):
 
         # Create the Hab for the Agent with only 2 AIDs
         agentHby = habbing.Habery(name=caid, base=self.base, bran=self.bran, ks=ks, cf=cf, temp=self.temp)
-        agentHab = agentHby.makeHab(f"agent-{caid}", ns="agent", transferable=True, delpre=caid)
+        agentHab = agentHby.makeHab(habName, ns="agent", transferable=True, delpre=caid)
         agentRgy = Regery(hby=agentHby, name=agentHab.name, base=self.base, temp=self.temp)
 
         agent = Agent(agentHby, agentRgy, agentHab,
@@ -784,17 +792,40 @@ def loadEnds(app):
 class BootEnd:
     """ Resource class for creating datastore in cloud ahab """
 
-    def __init__(self, agency):
+    def __init__(self, agency: Agency, username: str | None = None, password: str | None = None):
         """ Provides endpoints for initializing and unlocking an agent
 
         Parameters:
             agency (Agency): Agency for managing agents
 
         """
-        self.authn = authing.Authenticater(agency=agency)
+        self.username = username
+        self.password = password
         self.agency = agency
+    
+    def authenticate(self, req: falcon.Request):
+        if self.username is None and self.password is None:
+            return
 
-    def on_post(self, req, rep):
+        if req.auth is None:
+            raise falcon.HTTPUnauthorized(title="Unauthorized")
+        
+        scheme, token = req.auth.split(' ')
+        if scheme != 'Basic':
+            raise falcon.HTTPUnauthorized(title="Unauthorized")
+
+        try:
+            username, password = b64decode(token).decode('utf-8').split(':')
+
+            if username == self.username and password == self.password:
+                return
+
+        except Exception:
+            raise falcon.HTTPUnauthorized(title="Unauthorized")
+        
+        raise falcon.HTTPUnauthorized(title="Unauthorized")
+
+    def on_post(self, req: falcon.Request, rep: falcon.Response):
         """ Inception event POST endpoint
 
         Give me a new Agent.  Create Habery using ctrlPRE as database name, agentHab that anchors the caid and
@@ -805,6 +836,8 @@ class BootEnd:
             rep (Response): falcon.Response HTTP response object
 
         """
+
+        self.authenticate(req)
 
         body = req.get_media()
         if "icp" not in body:

@@ -5,6 +5,7 @@ keria.app.agenting module
 
 Testing the Mark II Agent
 """
+from base64 import b64encode
 import json
 import os
 import shutil
@@ -142,8 +143,33 @@ def test_agency():
         if os.path.exists(f'/usr/local/var/keri/adb/{base}'):
             shutil.rmtree(f'/usr/local/var/keri/adb/{base}')
 
+def test_create_agent_with_curls():
+    salt = b'0123456789abcdef'
+    salter = coring.Salter(raw=salt)
+    cf = configing.Configer(name="keria", headDirPath="scripts", temp=True, reopen=True, clear=False)
 
-def test_boot_ends(helpers):
+    with habbing.openHby(name="keria", salt=salter.qb64, temp=True, cf=cf) as hby:
+        hby.makeHab(name="test")
+
+        curls=["http://localhost:3902", "https://example.com:3902"]
+        agency = agenting.Agency(name="agency", base="", bran=None, temp=True, configFile="keria",
+                                 configDir="scripts", curls=curls)
+
+        tock = 0.03125
+        limit = 1.0
+        doist = doing.Doist(limit=limit, tock=tock, real=True)
+        doist.enter(doers=[agency])
+
+        caid = "ELI7pg979AdhmvrjDeam2eAO2SR5niCgnjAJXJHtJose"
+        agent = agency.create(caid)
+
+        assert agent.agentHab.cf is not None
+        assert agent.agentHab.cf.get(f"agent-{caid}") is not None
+        assert agent.agentHab.cf.get(f"agent-{caid}")[f"agent-{caid}"] is not None
+        assert agent.agentHab.cf.get(f"agent-{caid}")[f"agent-{caid}"]["curls"] == curls
+
+
+def test_unprotected_boot_ends(helpers):
     agency = agenting.Agency(name="agency", bran=None, temp=True)
     doist = doing.Doist(limit=1.0, tock=0.03125, real=True)
     doist.enter(doers=[agency])
@@ -176,6 +202,50 @@ def test_boot_ends(helpers):
         'description': 'agent for controller EK35JRNdfVkO4JwhXaSTdV4qzB_ibk_tGJmSVcY4pZqx already exists'
     }
 
+def test_protected_boot_ends(helpers):
+    agency = agenting.Agency(name="agency", bran=None, temp=True)
+    doist = doing.Doist(limit=1.0, tock=0.03125, real=True)
+    doist.enter(doers=[agency])
+
+    serder, sigers = helpers.controller()
+    assert serder.pre == helpers.controllerAID
+
+    app = falcon.App()
+    client = testing.TestClient(app)
+
+    username = "test"
+    password = "test"
+
+    bootEnd = agenting.BootEnd(agency, username=username, password=password)
+    app.add_route("/boot", bootEnd)
+
+    body = dict(
+        icp=serder.ked,
+        sig=sigers[0].qb64,
+        salty=dict(
+            stem='signify:aid', pidx=0, tier='low', sxlt='OBXYZ',
+            icodes=[MtrDex.Ed25519_Seed], ncodes=[MtrDex.Ed25519_Seed]
+        )
+    )
+
+    rep = client.simulate_post("/boot", body=json.dumps(body).encode("utf-8"))
+    assert rep.status_code == 401
+
+    rep = client.simulate_post("/boot", body=json.dumps(body).encode("utf-8"), headers={"Authorization": "Something test"})
+    assert rep.status_code == 401
+
+    rep = client.simulate_post("/boot", body=json.dumps(body).encode("utf-8"), headers={"Authorization": "Basic test:test"})
+    assert rep.status_code == 401
+
+    rep = client.simulate_post("/boot", body=json.dumps(body).encode("utf-8"), headers={"Authorization": f"Basic {b64encode(b'test:foobar').decode('utf-8')}"} )
+    assert rep.status_code == 401
+
+    rep = client.simulate_post("/boot", body=json.dumps(body).encode("utf-8"), headers={"Authorization": f"Basic {b64encode(b'foobar:test').decode('utf-8')}"} )
+    assert rep.status_code == 401
+
+    authorization = f"Basic {b64encode(b'test:test').decode('utf-8')}"
+    rep = client.simulate_post("/boot", body=json.dumps(body).encode("utf-8"), headers={"Authorization": authorization})
+    assert rep.status_code == 202
 
 def test_witnesser(helpers):
     salt = b'0123456789abcdef'

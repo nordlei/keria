@@ -7,6 +7,7 @@ Witness command line interface
 """
 import argparse
 import logging
+import os
 
 from keri import __version__
 from keri import help
@@ -25,15 +26,12 @@ parser.add_argument('-V', '--version',
 parser.add_argument('-a', '--admin-http-port',
                     dest="admin",
                     action='store',
-                    default=3901,
                     help="Admin port number the HTTP server listens on. Default is 3901.")
 parser.add_argument('-H', '--http',
                     action='store',
-                    default=3902,
                     help="Local port number the HTTP server listens on. Default is 3902.")
 parser.add_argument('-B', '--boot',
                     action='store',
-                    default=3903,
                     help="Boot port number the Boot HTTP server listens on.  This port needs to be secured."
                          " Default is 3903.")
 parser.add_argument('-n', '--name',
@@ -68,40 +66,31 @@ def launch(args):
 
     logger = help.ogler.getLogger()
 
-    logger.info("******* Starting Agent for %s listening: admin/%s, http/%s "
-                ".******", args.name, args.admin, args.http)
+    adminPort = int(args.admin or os.getenv("KERIA_ADMIN_PORT", "3901"))
+    httpPort = int(args.http or os.getenv("KERIA_HTTP_PORT", "3902"))
+    bootPort = int(args.boot or os.getenv("KERIA_BOOT_PORT", "3903"))
 
-    runAgent(name=args.name,
-             base=args.base,
-             bran=args.bran,
-             admin=int(args.admin),
-             http=int(args.http),
-             boot=int(args.boot),
-             configFile=args.configFile,
-             configDir=args.configDir,
-             keypath=args.keypath,
-             certpath=args.certpath,
-             cafilepath=args.cafilepath)
-
-    logger.info("******* Ended Agent for %s listening: admin/%s, http/%s"
-                ".******", args.name, args.admin, args.http)
-
-
-def runAgent(name="ahab", base="", bran="", admin=3901, http=3902, boot=3903, configFile=None,
-             configDir=None, keypath=None, certpath=None, cafilepath=None, expire=0.0):
-    """
-    Setup and run a KERIA Agency
-    """
+    logger.info("******* Starting Agent for %s listening: admin/%s, http/%s"
+                ".******", args.name, adminPort, httpPort)
 
     doers = []
-    doers.extend(agenting.setup(name=name, base=base, bran=bran,
-                                adminPort=admin,
-                                httpPort=http,
-                                bootPort=boot,
-                                configFile=configFile,
-                                configDir=configDir,
-                                keypath=keypath,
-                                certpath=certpath,
-                                cafilepath=cafilepath))
+    doers.extend(agenting.setup(name=args.name or "ahab",
+                                base=args.base,
+                                bran=args.bran or os.getenv("KERIA_PASSCODE") or "",
+                                adminPort=adminPort,
+                                httpPort=httpPort,
+                                bootPort=bootPort,
+                                configFile=args.configFile,
+                                configDir=args.configDir,
+                                keypath=args.keypath,
+                                certpath=args.certpath,
+                                cafilepath=args.cafilepath,
+                                curls=os.getenv("KERIA_CURLS").split(";") if os.getenv("KERIA_CURLS") is not None else None,
+                                username=os.getenv("KERIA_BOOT_USERNAME"),
+                                password=os.getenv("KERIA_BOOT_PASSWORD"),
+                                cors=os.getenv("KERI_AGENT_CORS", "false").lower() in ("true", "1")))
 
-    directing.runController(doers=doers, expire=expire)
+    directing.runController(doers=doers, expire=0.0)
+
+    logger.info("******* Ended Agent for %s listening: admin/%s, http/%s"
+                ".******", args.name, adminPort, httpPort)
