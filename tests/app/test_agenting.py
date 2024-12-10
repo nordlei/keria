@@ -143,6 +143,52 @@ def test_agency():
             shutil.rmtree(f'/usr/local/var/keri/adb/{base}')
 
 
+def test_agency_without_config_file():
+    salt = b'0123456789abcdef'
+    salter = coring.Salter(raw=salt)
+    cf = configing.Configer(name="keria", headDirPath="scripts", temp=True, reopen=True, clear=False)
+
+    with habbing.openHby(name="keria", salt=salter.qb64, temp=True, cf=cf) as hby:
+        hby.makeHab(name="test")
+
+        agency = agenting.Agency(name="agency", base="", bran=None, temp=True, configFile=None, configDir="scripts")
+        assert agency.cf is None
+
+        doist = doing.Doist(limit=1.0, tock=0.03125, real=True)
+        doist.extend(doers=[agency])
+
+        # Ensure we can still create agent
+        caid = "ELI7pg979AdhmvrjDeam2eAO2SR5niCgnjAJXJHtJose"
+        agent = agency.create(caid)
+        assert agent.pre == "EIAEKYpTygdBtFHBrHKWeh0aYCdx0ZJqZtzQLFnaDB2b"
+
+def test_agency_with_urls_from_arguments():
+    salt = b'0123456789abcdef'
+    salter = coring.Salter(raw=salt)
+    cf = configing.Configer(name="keria", headDirPath="scripts", temp=True, reopen=True, clear=False)
+
+    with habbing.openHby(name="keria", salt=salter.qb64, temp=True, cf=cf) as hby:
+        hby.makeHab(name="test")
+
+        curls = ["http://example.com:3902/"]
+        iurls = ["http://example.com:5432/oobi"]
+        durls = ["http://example.com:7723/oobi"]
+        agency = agenting.Agency(name="agency", base="", bran=None, temp=True, configDir="scripts", curls=curls, iurls=iurls, durls=durls)
+        assert agency.cf is None
+
+        doist = doing.Doist(limit=1.0, tock=0.03125, real=True)
+        doist.extend(doers=[agency])
+
+        # Ensure we can still create agent
+        caid = "ELI7pg979AdhmvrjDeam2eAO2SR5niCgnjAJXJHtJose"
+        agent = agency.create(caid)
+        assert agent.pre == "EIAEKYpTygdBtFHBrHKWeh0aYCdx0ZJqZtzQLFnaDB2b"
+
+        assert agent.hby.cf is not None
+        assert agent.hby.cf.get()[f"agent-{caid}"]["curls"] == curls
+        assert agent.hby.cf.get()["iurls"] == iurls
+        assert agent.hby.cf.get()["durls"] == durls
+
 def test_boot_ends(helpers):
     agency = agenting.Agency(name="agency", bran=None, temp=True)
     doist = doing.Doist(limit=1.0, tock=0.03125, real=True)
