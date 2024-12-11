@@ -64,6 +64,14 @@ parser.add_argument("--certpath", action="store", required=False, default=None,
                     help="TLS server signed certificate (public key) file")
 parser.add_argument("--cafilepath", action="store", required=False, default=None,
                     help="TLS server CA certificate chain")
+parser.add_argument("--experimental-boot-password",
+                    help="Experimental password for boot endpoint. Enables HTTP Basic Authentication for the boot endpoint. Only meant to be used for testing purposes.",
+                    dest="bootPassword",
+                    default=os.getenv("KERIA_EXPERIMENTAL_BOOT_PASSWORD"))
+parser.add_argument("--experimental-boot-username",
+                    help="Experimental username for boot endpoint. Enables HTTP Basic Authentication for the boot endpoint. Only meant to be used for testing purposes.",
+                    dest="bootUsername",
+                    default=os.getenv("KERIA_EXPERIMENTAL_BOOT_USERNAME"))
 
 def getListVariable(name):
     value = os.getenv(name)
@@ -92,7 +100,9 @@ def launch(args):
                             cors=os.getenv("KERI_AGENT_CORS", "false").lower() in ("true", "1"),
                             curls=getListVariable("KERIA_CURLS"),
                             iurls=getListVariable("KERIA_IURLS"),
-                            durls=getListVariable("KERIA_DURLS"))
+                            durls=getListVariable("KERIA_DURLS"),
+                            bootPassword=args.bootPassword,
+                            bootUsername=args.bootUsername)
 
     directing.runController(doers=agency, expire=0.0)
 
